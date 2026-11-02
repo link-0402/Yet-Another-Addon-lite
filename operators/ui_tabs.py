@@ -16,7 +16,7 @@ class OutfitCategory(Operator):
 
     def invoke(self, context: Context, event):
         props = get_window_props()
-        categories = ["overview", "shapes", "mesh", "weights", "armature"]
+        categories = ["shapes", "mesh", "weights"]
         if event.shift:
             state = getattr(props, f"{self.menu.lower()}_category")
             if state:

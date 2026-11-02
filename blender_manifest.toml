@@ -23,7 +23,6 @@ license = ["SPDX:GPL-3.0-or-later"]
 [permissions]
 
 files = "Import/export files from/to disk"
-clipboard = "Paste bone scaling"
 
 [build]
 

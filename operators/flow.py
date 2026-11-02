@@ -1,36 +1,9 @@
 import bpy
 import numpy as np
 
-from numpy                import single
 from bpy.props            import IntProperty
-from bpy.types            import Object, Operator, NodesModifier, NodeTree, Nodes, Node, NodeLinks, ShaderNodeMath, ShaderNodeCombineColor
+from bpy.types            import Operator, NodesModifier, NodeTree, Nodes, Node, NodeLinks, ShaderNodeMath, ShaderNodeCombineColor
 
-from ..io.model.com.space import lin_to_srgb
-
-
-def default_xiv_flow(obj: Object) -> None:
-    count = len(obj.data.loops)
-    
-    if "vc2" in obj.data.color_attributes:
-        layer = obj.data.color_attributes["vc2"]
-    
-        if layer.data_type =='BYTE_COLOR':
-            # This is a correction to restore linear colour data.
-            rgba = np.ones(count * 4, dtype=single)
-            layer.data.foreach_get("color", rgba)
-            obj.data.color_attributes.remove(layer)
-            
-            layer = obj.data.color_attributes.new("xiv_flow", domain='CORNER', type='FLOAT_COLOR')
-            layer.data.foreach_set("color", lin_to_srgb(rgba))
-        else:
-            layer.name = "xiv_flow" 
-
-    else:
-        rg    = np.full((count, 2), 0.5, dtype=single)
-        ba    = np.ones((count, 2), dtype=single)
-        rgba  = np.c_[rg, ba]
-        layer = obj.data.color_attributes.new("xiv_flow", domain='CORNER', type='FLOAT_COLOR')
-        layer.data.foreach_set("color", rgba.flatten())
 
 def get_colour(angle: int):
     precision = np.pi / 64  

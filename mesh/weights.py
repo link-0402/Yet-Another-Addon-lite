@@ -35,15 +35,17 @@ def group_weights(indices: NDArray[uint32], weights: NDArray[float32]) -> tuple[
 
     return grouped_indices, unique_weights
 
-def remove_vertex_groups(obj: Object, skeleton: Object, prefix: tuple[str, ...], store_yas=False) -> None:
-        """Can remove any vertex group and add weights to parent group."""
-        group_to_parent = _get_group_parent(obj, skeleton, prefix)
-        source_groups   = [value for value in group_to_parent.keys()]
+def remove_vertex_groups(obj: Object, skeleton: Object, prefix: str | tuple[str, ...], store_yas=False) -> list[str]:
+        """Can remove any vertex group and add weights to parent group. 
+        Returns the groups that were left alone because the skeleton has no parent bone for them."""
+        group_to_parent, skipped = _get_group_parent(obj, skeleton, prefix)
+        source_groups            = list(group_to_parent.keys())
 
         if not source_groups:
-            return
+            return skipped
 
-        weight_matrix = _create_weight_matrix(obj, skeleton, group_to_parent, source_groups)
+        source_names  = [obj.vertex_groups[idx].name for idx in source_groups]
+        weight_matrix = _create_weight_matrix(obj, group_to_parent, source_groups)
 
         # Adds weights to parent
         updated_groups = {value for value in group_to_parent.values()}
@@ -54,17 +56,19 @@ def remove_vertex_groups(obj: Object, skeleton: Object, prefix: tuple[str, ...],
             add_to_vgroup(weight_matrix, v_group)
 
         if store_yas:
-            _store_yas_groups(obj, skeleton, group_to_parent, weight_matrix)
+            _store_yas_groups(obj, group_to_parent, weight_matrix)
 
-        for v_group in obj.vertex_groups:
-            if v_group.name.startswith(prefix):
-                obj.vertex_groups.remove(v_group)
+        # Removed by name, removing while iterating the vertex groups can skip groups.
+        for name in source_names:
+            obj.vertex_groups.remove(obj.vertex_groups[name])
+        
+        return skipped
 
-def _store_yas_groups(obj: Object, skeleton: Object, group_to_parent: dict[int, int], weight_matrix: NDArray[float32]) -> None:
+def _store_yas_groups(obj: Object, group_to_parent: dict[int, int], weight_matrix: NDArray[float32]) -> None:
     yas_groups: Iterable[YASGroup] = obj.yas.v_groups
     
     existing_groups = [group.name for group in yas_groups]
-    for group in group_to_parent:
+    for group, parent in group_to_parent.items():
         group_name = obj.vertex_groups[group].name
         if group_name in existing_groups:
             continue
@@ -74,7 +78,8 @@ def _store_yas_groups(obj: Object, skeleton: Object, group_to_parent: dict[int, 
 
         new_group: YASGroup  = yas_groups.add()
         new_group.name       = group_name
-        new_group.parent     = skeleton.data.bones.get(group_name).parent.name
+        # The group that actually received the weights, not necessarily the direct bone parent.
+        new_group.parent     = obj.vertex_groups[parent].name
 
         if len(indices) == 0:
             continue
@@ -85,14 +90,26 @@ def _store_yas_groups(obj: Object, skeleton: Object, group_to_parent: dict[int, 
         new_group.vertices.foreach_set("idx", indices)
         new_group.vertices.foreach_set("value", weights)
 
-def restore_yas_groups(obj: Object) -> None:
+def restore_yas_groups(obj: Object, names: Iterable[str] | None = None) -> None:
+    """Restores all stored groups, or only the ones in names, and removes them from storage."""
     yas_groups: Iterable[YASGroup] = obj.yas.v_groups
-    yas_to_parent: dict[str, str] = {}
-    stored_weights: dict[str, tuple[list[NDArray], NDArray]] = {}
+    yas_to_parent = {v_group.name: v_group.parent for v_group in yas_groups}
 
-    for v_group in yas_groups:
-        verts =  len(v_group.vertices)
-        yas_to_parent[v_group.name] = v_group.parent
+    def weighted_parent(name: str) -> str:
+        # Older storage saved the direct bone parent, which can itself be a stored group.
+        # Its weights were merged into the first ancestor that was kept on the mesh.
+        parent  = yas_to_parent[name]
+        visited = {name}
+        while parent in yas_to_parent and parent not in visited:
+            visited.add(parent)
+            parent = yas_to_parent[parent]
+        return parent
+
+    restored = [idx for idx, v_group in enumerate(yas_groups) if names is None or v_group.name in names]
+    for idx in restored:
+        v_group   = yas_groups[idx]
+        yas_group = obj.vertex_groups.get(v_group.name) or obj.vertex_groups.new(name=v_group.name)
+        verts     = len(v_group.vertices)
         if not verts:
             continue
 
@@ -103,55 +120,44 @@ def restore_yas_groups(obj: Object) -> None:
         v_group.vertices.foreach_get("value", weights)
 
         grouped_indices, unique_weights = group_weights(indices, weights)
-        
-        stored_weights[v_group.name] = (grouped_indices, unique_weights)
 
-    for yas_name, parent_name in yas_to_parent.items():
-        parent = obj.vertex_groups.get(parent_name)
-        if not parent: 
-            continue
-
-        if obj.vertex_groups.get(yas_name):
-            yas_group = obj.vertex_groups.get(yas_name)
-        else: 
-            yas_group = obj.vertex_groups.new(name=yas_name)
-
-        if yas_name not in stored_weights:
-            continue
-
-        weights = stored_weights[yas_name]
-        for array_idx, vert_indices in enumerate(weights[0]):
+        parent = obj.vertex_groups.get(weighted_parent(v_group.name))
+        for array_idx, vert_indices in enumerate(grouped_indices):
             vert_indices = vert_indices.tolist()
-            parent.add(vert_indices, weights[1][array_idx], type='SUBTRACT')
-            yas_group.add(vert_indices, weights[1][array_idx], type='REPLACE')
+            if parent:
+                parent.add(vert_indices, unique_weights[array_idx], type='SUBTRACT')
+            yas_group.add(vert_indices, unique_weights[array_idx], type='REPLACE')
     
-    yas_groups.clear()
+    for idx in reversed(restored):
+        yas_groups.remove(idx)
 
-def _get_group_parent(obj: Object, skeleton: Object, prefix: set[str]) -> dict[int, int | str]:
+def _get_group_parent(obj: Object, skeleton: Object, prefix: str | tuple[str, ...]) -> tuple[dict[int, int | str], list[str]]:
     group_to_parent = {}
+    skipped         = []
 
     for v_group in obj.vertex_groups:
         if not v_group.name.startswith(prefix):
             continue
         
-        parent = skeleton.data.bones.get(v_group.name).parent.name
-        parent_group = obj.vertex_groups.get(parent)
+        bone   = skeleton.data.bones.get(v_group.name)
+        parent = bone.parent if bone else None
+        # Parents that are removed as well pass their weights on, so skip straight to the first kept ancestor.
+        while parent and parent.name.startswith(prefix):
+            parent = parent.parent
 
+        if parent is None:
+            skipped.append(v_group.name)
+            continue
+
+        parent_group = obj.vertex_groups.get(parent.name)
         if parent_group:
             group_to_parent[v_group.index] = parent_group.index
         else:
-            group_to_parent[v_group.index] = parent
+            group_to_parent[v_group.index] = parent.name
     
-    return group_to_parent
+    return group_to_parent, skipped
 
-def _create_weight_matrix(obj: Object, skeleton: Object, group_to_parent: dict[int, int | str], source_groups: set[int]) -> NDArray[float32]:
-
-    def find_parent_recursive(parent_idx: int):
-        parent = group_to_parent[parent_idx]
-        if parent in group_to_parent:
-           parent = find_parent_recursive(parent)
-        return parent
-
+def _create_weight_matrix(obj: Object, group_to_parent: dict[int, int | str], source_groups: list[int]) -> NDArray[float32]:
     verts          = len(obj.data.vertices)
     missing_groups = {value for value in group_to_parent.values() if isinstance(value, str)}
     max_groups     = len(obj.vertex_groups) + len(missing_groups)
@@ -173,39 +179,22 @@ def _create_weight_matrix(obj: Object, skeleton: Object, group_to_parent: dict[i
                 if group.group in source_groups:
                     weight_matrix[vertex_idx, group.group] = group.weight
 
-    _create_missing_parents(obj, skeleton, group_to_parent)
+    _create_missing_parents(obj, group_to_parent)
 
     for group_idx, parent in group_to_parent.items():
-        if parent in group_to_parent:
-            parent = find_parent_recursive(parent)
-            group_to_parent[group_idx] = parent
-            
         weight_matrix[:, parent] += weight_matrix[:, group_idx]
 
     return weight_matrix
 
-def _create_missing_parents(obj: Object, skeleton: Object, group_to_parent: dict[int, int | str]) -> None:
-    parent_to_group = {}
-    for group, parent in group_to_parent.items():
-        parent_to_group[parent] = parent_to_group.get(parent, []) + [group]
-
-    added_parents = set()
+def _create_missing_parents(obj: Object, group_to_parent: dict[int, int | str]) -> None:
+    created: dict[str, int] = {}
     for group_idx, parent in group_to_parent.items():
         if not isinstance(parent, str):
             continue
-        if parent in added_parents:
-            continue
+        if parent not in created:
+            created[parent] = obj.vertex_groups.new(name=parent).index
 
-        v_group     = obj.vertex_groups[group_idx].name
-        parent_name = skeleton.data.bones.get(v_group).parent.name
-        new_group   = obj.vertex_groups.new(name=parent)
-
-        added_parents.add(parent_name)
-
-        parent = new_group.index
-
-        for group in parent_to_group[parent_name]:
-            group_to_parent[group] = parent
+        group_to_parent[group_idx] = created[parent]
 
 
 def combine_v_groups(obj: Object, v_groups: list[int]) -> VertexGroup:

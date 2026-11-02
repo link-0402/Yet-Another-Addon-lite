@@ -1,9 +1,10 @@
 import bpy
 
-from .getters         import get_window_props, get_devkit_props, get_studio_props, get_devkit_win_props
+from .getters         import get_devkit_props, get_studio_props, get_devkit_win_props
 from bpy.types        import Object, Context
 from bpy.app.handlers import persistent
 from ..preferences    import get_prefs
+from .devkit_sync     import set_sync_handlers, remove_sync_handlers
 
 
 _active_obj = None
@@ -11,9 +12,6 @@ _active_obj = None
 _pre_armature = None
 _pre_tri      = None
 
-
-def frame_ui(dummy):
-    get_studio_props().animation_frame = bpy.context.scene.frame_current
 
 def get_mesh_props(dummy=None) -> None:
     obj: Object = bpy.context.active_object
@@ -69,25 +67,18 @@ def pre_anim_handling(dummy) ->None:
         except:
             pass
 
-    bpy.app.handlers.frame_change_pre.append(frame_ui)
-
 @persistent
 def post_anim_handling(dummy) ->None:
-    props    = get_window_props()
     devkit   = get_devkit_win_props()
     context  = bpy.context
     if devkit:
         devkit.devkit_triangulation = _pre_tri
-    
-    props.animation_frame = context.scene.frame_current
     
     if get_prefs().armature_vis_anim:
         try:
             viewport_armature(context, _pre_armature)
         except:
             pass
-
-    bpy.app.handlers.frame_change_pre.remove(frame_ui)
 
 
 def set_handlers() -> None:
@@ -96,8 +87,10 @@ def set_handlers() -> None:
     bpy.app.handlers.load_post.append(active_obj_msgbus)
     bpy.app.handlers.animation_playback_pre.append(pre_anim_handling)
     bpy.app.handlers.animation_playback_post.append(post_anim_handling)
+    set_sync_handlers()
 
 def remove_handlers() -> None:
+    remove_sync_handlers()
     bpy.msgbus.clear_by_owner(_active_obj)
     bpy.app.handlers.load_post.remove(active_obj_msgbus)
     bpy.app.handlers.animation_playback_pre.remove(pre_anim_handling)

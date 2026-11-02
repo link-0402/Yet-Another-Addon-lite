@@ -30,8 +30,11 @@ def get_collection_obj(collection_name: str, type='ANY', sub_collections=False) 
     collection = bpy.data.collections.get(collection_name)
 
     all_objects = []
+    if collection is None:
+        return all_objects
+
     if type == 'ANY':
-        all_objects.extend[collection.objects]
+        all_objects.extend(collection.objects)
 
     else:
         objects = [obj for obj in collection.objects if obj.type == type]

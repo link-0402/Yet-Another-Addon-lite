@@ -1,170 +1,14 @@
-import os
 import bpy
 
 from typing          import TYPE_CHECKING
 from bpy.types       import PropertyGroup, Object, Context
 from bpy.props       import StringProperty, EnumProperty, CollectionProperty, PointerProperty, BoolProperty, IntProperty, FloatProperty
 
-from .enums          import get_racial_enum
-from .getters        import get_window_props, get_devkit_props, get_xiv_meshes
-from ..mesh.objects  import visible_meshobj
-from ..utils.typings import BlendEnum, BlendCollection
+from .getters        import get_window_props, get_devkit_props
+from .devkit_sync    import sync_parts
+from ..utils.typings import BlendCollection
 
 
-XIV_MATERIALS = {
-                    "gen2/vanilla": "/mt_c0101b0001_a.mtrl",
-                    "gen3/tbse"   : "/mt_c0101b0001_b.mtrl",
-                    "bibo"        : "/mt_c0101b0001_bibo.mtrl",
-                    
-                    "bibopube"  : "/mt_c0201b0001_bibopube.mtrl",
-                    "betterpube": "/mt_c0201b0001_betterpube.mtrl",
-
-                    "yet another piercing"  : "/mt_c0201b0001_piercings.mtrl",
-                    "yet another fingernail": "/mt_c0201b0001_yafinger.mtrl",
-                    "yet another toenail"   : "/mt_c0201b0001_yatoe.mtrl",
-                }
-
-class MeshProps(PropertyGroup):
-
-    def get_obj_materials(self) -> set[str]:
-        obj_materials = set()
-        for obj_data in get_xiv_meshes(visible_meshobj())[self.idx]:
-            obj = obj_data[0]
-            if "xiv_material" in obj and obj["xiv_material"].strip():
-                obj_materials.add(obj["xiv_material"])
-            for material in obj.material_slots:
-                if not material.name.endswith(".mtrl"):
-                    continue
-                obj_materials.add(material.name)
-            
-        return obj_materials
-
-    def _material_search(self, context: Context, edit_text: str) -> list[str]:
-        materials = [
-                        "Bibo", "Gen2/Vanilla", "Gen3/TBSE", 
-                        "---------------------------",
-                        "Bibopube", "Betterpube",
-                        "---------------------------", 
-                        "Yet Another Piercing", "Yet Another Toenail", "Yet Another Fingernail",
-                    ]
-        
-        obj_materials = list(self.get_obj_materials())
-        if obj_materials:
-            obj_materials.append("---------------------------",)
-            materials = obj_materials + materials
-            
-        return materials
-    
-    def _get_material(self):
-        value = self.get("material", "")
-        return value
-
-    def _set_material(self, material: str) -> None:
-        from ..io.model.exp.validators import clean_material_path
-        
-        mat_lower = material.lower()
-        if mat_lower in XIV_MATERIALS:
-            self["material"] = XIV_MATERIALS[mat_lower]
-        else:
-            self["material"] = clean_material_path(material)
-
-    idx     : IntProperty() # type: ignore
-    material: StringProperty(
-                    name="", 
-                    default="", 
-                    description="Path to material",
-                    get=_get_material, 
-                    set=_set_material,
-                    search=_material_search,
-                    search_options={'SUGGESTION'},
-                    
-                ) # type: ignore
-    
-    flow    : BoolProperty(default=False, name="", description="Export available flow data for this mesh") # type: ignore
-
-    if TYPE_CHECKING:
-        idx     : int
-        material: str
-        flow    : bool
-
-class ModelProps(PropertyGroup):
-    meshes    : CollectionProperty(type=MeshProps) # type: ignore
-    use_lods  : BoolProperty(name="Export LODs", default=False, description="Export Level of Detail models") # type: ignore
-    neck_morph: EnumProperty(
-                    name= "",
-                    default=1,
-                    description= "For face models. Select a race's neck morph data to use",
-                    items=lambda self, context: get_racial_enum()
-                    ) # type: ignore
-    
-    shadow_disabled            : BoolProperty(name="Disable Shadows", default=False, description="Disable shadow casting for this model") # type: ignore
-    light_shadow_disabled      : BoolProperty(name="Disable Light/Shadow", default=False, description="Unknown") # type: ignore
-    waving_animation_disabled  : BoolProperty(name="Disable Waving Anim", default=True,  description="Disable waving animation") # type: ignore
-    lighting_reflection_enabled: BoolProperty(name="Lighting Reflections", default=False, description="Unknown") # type: ignore
-    unknown1                   : BoolProperty(name="UNKNOWN1", default=False, description="Unknown") # type: ignore
-    rain_occlusion_enabled     : BoolProperty(name="Rain Occlusion", default=False, description="This model will block/occlude rain") # type: ignore
-    snow_occlusion_enabled     : BoolProperty(name="Snow Occlusion", default=False, description="This model will block/occlude snow") # type: ignore
-    dust_occlusion_enabled     : BoolProperty(name="Dust Occlusion", default=False, description="This model will block/occlude dust") # type: ignore
-
-    unknown2                   : BoolProperty(name="UNKNOWN2", default=False, description="Unknown") # type: ignore
-    edge_geometry_disabled     : BoolProperty(name="Disable Edge Geometry", default=False, description="Unknown") # type: ignore
-    force_lod_range_enabled    : BoolProperty(name="Force LOD Range", default=False, description="Unknown")  # type: ignore
-    shadow_mask_enabled        : BoolProperty(name="Shadow Mask", default=False, description="Unknown") # type: ignore
-    extra_lod_enabled          : BoolProperty(name="Extra LOD Data", default=False, description="Enables extra LOD data for the model. Authoring for this data is not available") # type: ignore
-    enable_force_non_resident  : BoolProperty(name="Force Non-Resident", default=False, description="Unknown") # type: ignore
-    bg_uv_scroll_enabled       : BoolProperty(name="BG UV Scroll", default=False, description="Unknown") # type: ignore
-    static_mesh                : BoolProperty(name="Static Mesh", default=False, description="Not tested. Possibly used for furniture that does not use weights/bones") # type: ignore
-
-    unknown3                   : BoolProperty(name="UNKNOWN3", default=False, description="Unknown") # type: ignore
-    use_crest_change           : BoolProperty(name="Use Crest Change", default=False, description="Unknown") # type: ignore
-    use_material_change        : BoolProperty(name="Use Material Change", default=False, description="Unknown") # type: ignore
-    unknown4                   : BoolProperty(name="UNKNOWN4", default=False, description="Unknown") # type: ignore
-    unknown5                   : BoolProperty(name="UNKNOWN5", default=False, description="Unknown") # type: ignore
-    unknown6                   : BoolProperty(name="UNKNOWN6", default=False, description="Unknown") # type: ignore
-    unknown7                   : BoolProperty(name="UNKNOWN7", default=False, description="Unknown") # type: ignore
-    unknown8                   : BoolProperty(name="UNKNOWN8", default=False, description="Unknown") # type: ignore
-
-    def get_flags(self) -> dict[str, bool]:
-        flags = {}
-        for attr_name in self.bl_rna.properties.keys():
-            if attr_name == "use_lods":
-                continue
-            if isinstance(getattr(self, attr_name, None), bool):
-                flags[attr_name] = getattr(self, attr_name)
-
-        return flags
-    
-    if TYPE_CHECKING:
-        meshes: BlendCollection[MeshProps]
-
-        shadow_disabled            : bool
-        light_shadow_disabled      : bool
-        waving_animation_disabled  : bool
-        lighting_reflection_enabled: bool
-        unknown1                   : bool
-        rain_occlusion_enabled     : bool
-        snow_occlusion_enabled     : bool
-        dust_occlusion_enabled     : bool
-
-        unknown2                   : bool
-        edge_geometry_disabled     : bool
-        force_lod_range_enabled    : bool
-        shadow_mask_enabled        : bool
-        extra_lod_enabled          : bool
-        enable_force_non_resident  : bool
-        bg_uv_scroll_enabled       : bool
-        static_mesh                : bool
-
-        unknown3                   : bool
-        unknown4                   : bool
-        unknown5                   : bool
-        unknown6                   : bool
-        unknown7                   : bool
-        use_crest_change           : bool
-        use_material_change        : bool
-        unknown8                   : bool
-
-        
 class YASUIList(PropertyGroup):
 
     def update_lock_weight(self, context:Context) -> None:
@@ -210,6 +54,8 @@ class YASStorage(PropertyGroup):
     all_groups: BoolProperty(default=False) # type: ignore
     genitalia : BoolProperty(default=False) # type: ignore
     physics   : BoolProperty(default=False) # type: ignore
+    hands     : BoolProperty(default=False) # type: ignore
+    feet      : BoolProperty(default=False) # type: ignore
 
     v_groups  :CollectionProperty(type=YASGroup, description="Contains all stored vertex groups") # type: ignore
 
@@ -218,6 +64,8 @@ class YASStorage(PropertyGroup):
         all_groups: bool
         genitalia : bool
         physics   : bool
+        hands     : bool
+        feet      : bool
         v_groups  : BlendCollection[YASGroup]
         
 class ShapeModifiers(PropertyGroup):
@@ -229,8 +77,6 @@ class ShapeModifiers(PropertyGroup):
         icon: str
        
 class YAStudioProps(PropertyGroup):
-
-    model: PointerProperty(type=ModelProps) # type: ignore
 
     shape_modifiers_group: CollectionProperty(type=ShapeModifiers) # type: ignore
 
@@ -322,49 +168,6 @@ class YAStudioProps(PropertyGroup):
         'n_throw': 'Throw'
         }
 
-    def get_attr_name(self, attr: str) -> str:
-        parts = {
-                "nek": "Neck",
-                "ude": "Elbow",
-                "hij": "Wrist",
-                "arm": "Hand",
-                "kod": "Waist",
-                "hiz": "Knee",
-                "sne": "Shin",
-                "leg": "Boot",
-                "lpd": "Knee Pad",
-            }
-        
-        variant = {
-                "mv": "Head",
-                "tv": "Body",
-                "gv": "Glove",
-                "dv": "Leg",
-                "sv": "Shoe",
-                "ev": "Earring",
-                "nv": "Necklace",
-                "wv": "Bracelet",
-                "rv": "Ring",
-                "fv": "Face",
-                "hv": "Hair"
-            }
-        if attr.startswith("atr_"):
-            split = attr.split("_")
-            variant_id = split[1]
-            if variant_id in variant and len(split) > 2:
-                variant_part = split[2].upper()
-                return f"{variant[variant_id]} {variant_part}"
-            elif variant_id in parts:
-                return parts[variant_id]
-            else:
-                return attr
-        elif attr.startswith("heels_offset"):
-            return f"Heels: {attr.split('=')[1]}"
-        elif attr.startswith("skin_suffix"):
-            return f"Skin: {attr.split('=')[1]}"
-        else:
-            return attr
-        
     def _chest_controller_update(self, context: Context) -> None:
         key_blocks = get_devkit_props().yam_shapes.data.shape_keys.key_blocks
         for key in key_blocks:
@@ -382,68 +185,6 @@ class YAStudioProps(PropertyGroup):
         if self.shape_chest_base in ("Teardrop", "Cupcake"):
             key_blocks["Lavatop"].mute = False
 
-    def scene_actions(self, context) -> BlendEnum: 
-        armature_actions = [("None", "None", ""), None]
-
-        for action in bpy.data.actions:
-            slots = getattr(action, "slots", None)
-            if slots is not None:
-                # Blender 4.4+ stores the target ID type on action slots.
-                is_object_action = any(slot.target_id_type == "OBJECT" for slot in slots)
-            else:
-                # Keep support for legacy Blender versions which use id_root.
-                is_object_action = getattr(action, "id_root", None) == "OBJECT"
-
-            if is_object_action:
-                armature_actions.append((action.name , action.name, "Action"))
-        return armature_actions
-    
-    def set_action(self, context: Context) -> None:
-        if not self.outfit_armature:
-            return
-        if self.actions == "None":
-            self.outfit_armature.animation_data.action = None
-            for bone in self.outfit_armature.pose.bones:
-                bone.location = (0.0, 0.0, 0.0)
-                if bone.rotation_mode == "QUATERNION":
-                    bone.rotation_quaternion = (1.0, 0.0, 0.0, 0.0)
-                else:
-                    bone.rotation_euler = (0.0, 0.0, 0.0)
-            return
-    
-        action = bpy.data.actions.get(self.actions)
-
-        animation_data = self.outfit_armature.animation_data_create()
-        animation_data.action = action
-        if hasattr(animation_data, "action_suitable_slots"):
-            suitable_slots = animation_data.action_suitable_slots
-            if suitable_slots:
-                animation_data.action_slot = suitable_slots[0]
-        context.scene.frame_end = int(action.frame_end)
-
-        if hasattr(YAStudioProps, "animation_frame"):
-            del YAStudioProps.animation_frame
-        
-        prop = IntProperty(
-            name="Current Frame",
-            default=0,
-            max=int(action.frame_end),
-            min=0,
-            update=lambda self, context: self.animation_frames(context)
-            ) 
-        
-        setattr(YAStudioProps, "animation_frame", prop)
-
-    def update_directory(self, context: Context, category: str) -> None:
-        prop = context.scene.file_props
-        actual_prop = f"{category}_directory"
-        display_prop = f"{category}_display_directory"
-
-        display_directory = getattr(prop, display_prop, "")
-
-        if os.path.exists(display_directory):  
-            setattr(prop, actual_prop, display_directory)
-
     def validate_shapes_source_enum(self, context) -> None:
         window = get_window_props().studio
         window.shapes_source_enum = self.shapes_source.data.shape_keys.key_blocks[0].name if self.shapes_source else "None"
@@ -451,19 +192,6 @@ class YAStudioProps(PropertyGroup):
     def validate_shapes_target_enum(self, context) -> None:
         window = get_window_props().studio
         window.shapes_target_enum = "None"
-
-    def animation_frames(self, context: Context) -> None:
-        if context.screen.is_animation_playing:
-            return None
-        else:
-            context.scene.frame_current = self.animation_frame
-    
-    animation_frame: IntProperty(
-        default=0,
-        max=500,
-        min=0,
-        update=lambda self, context: self.animation_frames(context),
-    ) # type: ignore
 
     shapes_source: PointerProperty(
         type= Object,
@@ -495,27 +223,6 @@ class YAStudioProps(PropertyGroup):
         update=_chest_controller_update
         )  # type: ignore
     
-    actions: EnumProperty(
-        name="Animations",
-        description="Select an animation from the scene",
-        items=scene_actions,
-        default= 0,
-        update=set_action
-    ) # type: ignore
-
-    outfit_armature: PointerProperty(
-        type= Object,
-        name= "",
-        description= "Select an armature from the scene",
-        poll=lambda self, obj: obj.type == "ARMATURE"
-        )  # type: ignore
-
-    pose_display_directory: StringProperty(
-        default="Select .pose file",
-        subtype="FILE_PATH", 
-        maxlen=255,
-        )  # type: ignore
-
     def set_yas_ui_vgroups(self, context):
         obj = self.yas_source
         window = get_window_props()
@@ -596,19 +303,27 @@ class YAStudioProps(PropertyGroup):
 
         )  # type: ignore
 
+    def _sync_mannequin_update(self, context: Context) -> None:
+        if self.sync_mannequin:
+            sync_parts(force=True)
+
+    sync_mannequin: BoolProperty(
+        name="",
+        description="Size and shape changes made on the Mannequin also go to the separate body parts",
+        default=False,
+        update=_sync_mannequin_update
+        ) # type: ignore
+
     if TYPE_CHECKING:
-        model                  : ModelProps
+        sync_mannequin   : bool
+
         shape_modifiers_group  : BlendCollection[ShapeModifiers]
         
-        pose_display_directory : str
         shape_chest_base       : str
-        actions                : str
         
         shapes_source          : Object
         shapes_target          : Object
-        outfit_armature        : Object
 
-        animation_frame  : int
         yas_source       : Object
         yas_vindex       : int
         yas_ui_vgroups   : BlendCollection[YASUIList]
@@ -617,8 +332,6 @@ class YAStudioProps(PropertyGroup):
 
 
 CLASSES = [   
-    MeshProps,
-    ModelProps, 
     YASUIList,
     YASWeights,
     YASGroup,

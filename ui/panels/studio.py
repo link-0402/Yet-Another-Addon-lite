@@ -1,14 +1,9 @@
 import bpy
 
-from functools       import partial
-from bpy.types       import Panel, UILayout, Context, Object
-from collections     import Counter
+from bpy.types       import Panel, UILayout, Context
          
-from ..draw          import aligned_row, get_conditional_icon, ui_category_buttons, show_ui_button, operator_button
-from ...props        import get_studio_props, get_devkit_props, get_window_props, get_devkit_win_props, get_xiv_meshes
-
-from ...mesh.objects import visible_meshobj
-from ...xivpy.model  import XIV_COL, XIV_UV
+from ..draw          import aligned_row, get_conditional_icon, ui_category_buttons
+from ...props        import get_studio_props, get_devkit_props, get_window_props, get_devkit_win_props
 
 
 class MeshStudio(Panel):
@@ -27,11 +22,9 @@ class MeshStudio(Panel):
         layout = self.layout
 
         self.options ={
-            "Overview": "INFO",
             "Shapes": "SHAPEKEY_DATA",
             "Mesh": "OUTLINER_OB_MESH",
             "Weights": "WPAINT_HLT",
-            "Armature": "ARMATURE_DATA"
             }
 
         row = layout.row()
@@ -39,9 +32,6 @@ class MeshStudio(Panel):
         ui_category_buttons(colui, self.window_props, self.options, "ya.outfit_category")
         col = row.column()
         
-        if self.window_props.overview_category:
-            self.draw_overview(col)
-            
         if self.window_props.shapes_category:
             self.draw_shapes(col)
             
@@ -51,253 +41,6 @@ class MeshStudio(Panel):
         if self.window_props.weights_category:
             self.draw_weights(col)
 
-        if self.window_props.armature_category:
-            self.draw_armature(col)
-
-    def draw_overview(self, layout:UILayout):
-        
-        def sorted_lods(mesh_data: list[tuple[Object, int, str, list[str]]]) -> tuple[list[tuple[Object, int, str, list[str]]], ...]:
-            lods = [[], [], []]
-            for obj, submesh, lod, name, props in mesh_data:
-                lods[lod].append((obj, submesh, lod, name, props))
-            
-            return lods[0], lods[1], lods[2]
-
-        def draw_name(obj: Object, name: str, mesh_idx: int, subrow: UILayout) -> None:
-            if mesh_idx:
-                op = subrow.operator("ya.overview_group", 
-                                    text="", 
-                                    emboss=False, 
-                                    icon="TRIA_UP")
-                op.type = "DEC_GROUP"
-                op.obj = obj.name
-            else:
-                subrow.label(text="", icon='BLANK1')
-
-            op = subrow.operator("ya.overview_group", 
-                                text="", 
-                                emboss=False, 
-                                icon="TRIA_DOWN")
-            op.type = "INC_GROUP"
-            op.obj = obj.name
-
-            op = subrow.operator("ya.overview_group", text=name, emboss=False)
-            op.type = "GROUP"
-            op.obj = obj.name
-
-        def draw_submesh(obj: Object, submesh: int, subrow: UILayout, conflict: bool) -> None:
-            if conflict:
-                subrow.label(text="", icon='ERROR')
-            else:
-                subrow.label(text="", icon='BLANK1') 
-
-            op = subrow.operator(
-                            "ya.overview_group", 
-                            text="", 
-                            emboss=False, 
-                            icon="TRIA_LEFT")
-            op.type = "DEC_PART"
-            op.obj = obj.name
-
-            op = subrow.operator("ya.overview_group", 
-                            text=f"{submesh}", 
-                            emboss=False, 
-                            )
-            op.type = "PART"
-            op.obj = obj.name
-
-            op = subrow.operator(
-                            "ya.overview_group", 
-                            text="", 
-                            emboss=False, 
-                            icon="TRIA_RIGHT")
-            op.type = "INC_PART"
-            op.obj = obj.name
-            subrow.label(text="", icon='BLANK1')
-
-        def draw_attr(obj: Object, props: list[str], subrow: UILayout) -> None:
-            subrow.alignment = "EXPAND"
-            for attr in props:
-                text    = self.outfit_props.get_attr_name(attr)
-                op      = subrow.operator("ya.attributes", text=f"{text}")
-                op.attr = attr
-                op.obj  = obj.name
-            if len(props) == 0:
-                subrow.label(text=" ", icon='BLANK1')
-            op      = subrow.operator("ya.attributes", icon="ADD", text="")
-            op.attr = "NEW"
-            op.obj  = obj.name
-
-        def draw_lods(layout: UILayout, lod_data: list[tuple[Object, int, int, int, str, list[str]]])-> None:
-            mesh_col  = layout.column(align=True)
-            conflicts = get_submesh_conflicts(lod_data)
-            for obj, submesh, lod, name, props in lod_data:
-                if obj is None:
-                    continue
-                conflict = True if submesh in conflicts else False
-                obj_row  = mesh_col.row(align=True).split(factor=0.3, align=True)
-                draw_name(obj, name, mesh_idx, obj_row.row(align=True))
-                draw_submesh(obj, submesh, obj_row.row(align=True), conflict)
-                draw_attr(obj, props, obj_row.row(align=True))
-
-        def draw_flags(layout: UILayout, model_flags: list[str]) -> None:
-            col_row  = layout.row(align=True)
-            flag_col = [col_row.column(align=True) for _ in range(2)]
-            for idx, flag in enumerate(model_flags):
-                col  = flag_col[idx % 2]
-                icon = get_conditional_icon(getattr(self.outfit_props.model, flag))
-                col.prop(self.outfit_props.model, flag, icon=icon)
-
-        def get_submesh_conflicts(mesh_data: list[tuple[Object, int, str, list[str]]]) -> set[int]:
-            submeshes = [obj_data[1] for obj_data in mesh_data if obj_data[0] is not None]
-            counts    = Counter(submeshes)
-            return {submesh for submesh, count in counts.items() if count > 1}
-        
-        columns = ["OBJECT", "PART", "ATTR"]
-        meshes  = get_xiv_meshes(visible_meshobj())
-        model   = self.outfit_props.model
-         
-        box         = layout.box()
-        header_row  = box.row(align=True).split(factor=0.3)
-        for text in columns:
-            subrow = header_row.row(align=True)
-            if text == "OBJECT":
-                subrow.label(text="", icon='BLANK1')
-                subrow.label(text="", icon='BLANK1')
-
-            subrow.alignment = "CENTER"
-            subrow.label(text=text)
-            
-        layout.separator(type="SPACE", factor=0.2)
-
-        triangles = 0
-        for mesh_idx, mesh_data in enumerate(meshes):
-            lod0, lod1, lod2 = sorted_lods(mesh_data)
-            vertices         = sum([len(obj_data[0].data.vertices) 
-                                    for obj_data in lod0 
-                                    if obj_data[0] is not None])
-            
-            mesh_box  = layout.box()
-
-            row = mesh_box.row(align=True).split(factor=0.25)
-            row.alignment = 'RIGHT'
-            row.label(text=f"Mesh #{mesh_idx} ")
-
-            subrow = row.row(align=True)
-            subrow.alignment = 'RIGHT'
-            if vertices > 65536:
-                subrow.label(text="", icon='ERROR')
-            elif vertices > 58982:
-                subrow.label(text="", icon='INFO')
-            subrow.label(text=f"Vertices: {vertices}   ")
-
-            mesh_box.separator(type="LINE", factor=0.2)
-            mesh_col  = mesh_box.column(align=True)
-            conflicts = get_submesh_conflicts(lod0)
-
-            uvs  = 0
-            cols = 0
-            flow = 0
-            for obj, submesh, lod, name, props in lod0:
-                if obj is None:
-                    continue
-                triangles += len(obj.data.loop_triangle_polygons)
-                conflict = True if submesh in conflicts else False
-
-                if "xiv_flow" in obj.data.color_attributes:
-                    flow += 1
-
-                cols = min(2, len([layer for layer in obj.data.color_attributes 
-                                    if layer.name.lower().startswith(XIV_COL)]))
-    
-                uvs  = min(3, len([layer for layer in obj.data.uv_layers 
-                                    if layer.name.lower().startswith(XIV_UV)]))
-
-                obj_row  = mesh_col.row(align=True).split(factor=0.3, align=True)
-                draw_name(obj, name, mesh_idx, obj_row.row(align=True))
-                draw_submesh(obj, submesh, obj_row.row(align=True), conflict)
-                draw_attr(obj, props, obj_row.row(align=True))
-            
-            if model.use_lods:
-                if lod1 or lod2:
-                    mesh_box.separator(type="LINE", factor=0.5)
-                if lod1:
-                    draw_lods(mesh_box, lod1)
-                if lod2:
-                    draw_lods(mesh_box, lod2)
-            
-            mesh_box.separator(type="LINE", factor=0.5)
-
-            if not (mesh_idx < len(model.meshes)):
-                operator_button(mesh_box, "ya.mesh_material", icon="NONE", text="Add Mesh Properties", attributes={"mesh": mesh_idx})
-                continue
-            
-            obj = lod0[0][0]
-            prop_col = mesh_box.column(align=True)
-            row    = prop_col.row().split(factor=0.25)
-
-            mat_op = partial(
-                            operator_button, 
-                            operator="ya.mesh_material",
-                            icon="NONE",
-                            text=obj["xiv_material"] if "xiv_material" in obj else "Add Material",
-                            attributes={"mesh": mesh_idx}
-                        )
-            
-            aligned_row(prop_col, "Material:", function=mat_op)
-            
-            flow_op = partial(
-                            operator_button, 
-                            operator="ya.flow_channel",
-                            icon="NONE",
-                            text="Add Flow Data" if flow < len(lod0) else "Has Flow Data",
-                            attributes={"mesh": mesh_idx}
-                        )
-
-            row = aligned_row(prop_col, "Flow:", function=flow_op)
-            row.prop(model.meshes[mesh_idx], "flow", text="", icon="RADIOBUT_ON" if model.meshes[mesh_idx].flow and flow else "RADIOBUT_OFF")
-
-            if not any((uvs, cols)):
-                mesh_box.separator(type="LINE", factor=0.5)
-            if not uvs:
-                row = mesh_box.row(align=True)
-                row.alignment = 'CENTER'
-                row.label(text="Couldn't detect any XIV UV channels.", icon='ERROR')
-            if not cols:
-                row = mesh_box.row(align=True)
-                row.alignment = 'CENTER'
-                row.label(text="Couldn't detect any XIV Colour channels.", icon='ERROR')
-
-            layout.separator(type="SPACE", factor=0.2)
-
-        selected_tris = sum([len(obj.data.loop_triangle_polygons) for obj in bpy.context.selected_objects if obj.type == "MESH"])
-        count         = f"{selected_tris:,} / {triangles:,}" if selected_tris else f"{triangles:,}"
-
-        options_box      = layout.box()
-        button, subrow   = show_ui_button(options_box, self.window_props, "button_model_expand", "Model Options")
-        subrow.alignment = "RIGHT"
-        subrow.label(text=f"Triangles: {count}   ")
-
-        if not button:
-            return
-        
-        options_box.separator(type="LINE", factor=0.5)
-
-        icon = get_conditional_icon(getattr(self.outfit_props.model, "use_lods"))
-        aligned_row(options_box, "LODs:", "use_lods", self.outfit_props.model, prop_str="Export", attr_icon=icon)
-        aligned_row(options_box, "Neck Morph:", "neck_morph", self.outfit_props.model)
-
-        options_box.separator(type="LINE", factor=0.5)
-
-        model_flags = list(self.outfit_props.model.get_flags().keys())
-        draw_flags(options_box, model_flags[:8])
-        
-        if not show_ui_button(options_box, self.window_props, "button_otherflags_expand", "Other Options")[0]:
-            return
-        
-        draw_flags(options_box, model_flags[8:16])
-        draw_flags(options_box, model_flags[16:])
-        
     def draw_shapes(self, layout:UILayout):
         box = layout.box()
         button_type = "shpk"
@@ -381,8 +124,9 @@ class MeshStudio(Panel):
                         "Teardrop":   "Teardrop", 
                         "Cupcake":    "Cupcake",
                         "Masc":       "MASC",  
-                        "Buff":       "Buff",    
-                        "Rue":        "Rue",        
+                        "Buff":       "Buff",
+                        "Rue":        "Rue",
+                        "Better Nips": "Better Nipples",
                     }
                 
                 row = col.row(align=True)
@@ -407,6 +151,8 @@ class MeshStudio(Panel):
                         "Alt Hips":   "Alt Hips",
                         "Small Butt": "Small Butt",         
                         "Soft Butt":  "Soft Butt",
+                        "Puffy":      "Gen A Puffy",
+                        "Camel Toe":  "Camel Toe",
                     }
                 
                 self.dynamic_column_buttons(2, col, self.devkit_win, labels, slot, button_type)
@@ -583,7 +329,9 @@ class MeshStudio(Panel):
             group_bool = {
                 "ALL": obj.yas.all_groups,
                 "GEN": obj.yas.genitalia or obj.yas.all_groups,
-                "PHYS": obj.yas.physics or obj.yas.all_groups
+                "PHYS": obj.yas.physics or obj.yas.all_groups,
+                "HANDS": obj.yas.hands or obj.yas.all_groups,
+                "FEET": obj.yas.feet or obj.yas.all_groups,
             }
             row = box.row(align=True)
             split = row.split(factor=0.33, align=True)
@@ -603,10 +351,7 @@ class MeshStudio(Panel):
 
     def yas_status(self) -> tuple[str, str]:
         no_weights  = "No stored weights."
-        gen_weights = "Genitalia weights stored."
         all_weights = "All weights stored."
-        phy_weights = "Physics weights stored."
-        com_weights = "Physics, gentialia, weights stored."
         vertices    = "Vertex count changed."
         missing_obj = "Check your devkit settings."
 
@@ -626,83 +371,23 @@ class MeshStudio(Panel):
 
         else:
             icon = 'CHECKMARK'
+            categories = [
+                name for name, stored in (
+                    ("genitalia", obj.yas.genitalia),
+                    ("physics",   obj.yas.physics),
+                    ("hands",     obj.yas.hands),
+                    ("feet",      obj.yas.feet),
+                ) if stored
+            ]
             if obj.yas.all_groups:
                 text = all_weights
-            elif obj.yas.genitalia and obj.yas.physics:
-                text = com_weights
-            elif obj.yas.genitalia:
-                text = gen_weights
-            elif obj.yas.physics:
-                text = phy_weights
+            elif categories:
+                text = f"{', '.join(categories).capitalize()} weights stored."
             else:
                 text = "Undefined weights stored."
     
         return icon, text
            
-    def draw_armature(self, layout:UILayout):
-        box = layout.box()
-        row = box.row()
-        row.alignment = "CENTER"
-        row.label(text="Armature", icon=self.options["Armature"])
-        row = box.row()
-        split = row.split(factor=0.25, align=True)
-        split.alignment = "RIGHT"
-        split.label(text="Armature:")
-        split.prop(self.outfit_props, "outfit_armature", text="", icon="ARMATURE_DATA")
-        box.separator(factor=0.5, type="LINE")
-        if not self.outfit_props.outfit_armature:
-            row = box.row()
-            row.alignment = "CENTER"
-            row.label(text="Please select an Armature.", icon="INFO")
-        else:
-            row = box.row(align=True)
-            split = row.split(factor=0.25, align=True)
-            split.alignment = "RIGHT"
-            split.label(text="Scaling:" if self.window_props.scaling_armature else "Pose:")
-            split.label(text=self.outfit_props.pose_display_directory)
-            buttonrow = split.row(align=True)
-            op = buttonrow.operator("ya.pose_apply", text="Apply")
-      
-            buttonrow.prop(self.window_props, "scaling_armature", text="", icon="FIXED_SIZE")
-            op = buttonrow.operator("ya.pose_apply", text="", icon="FILE_REFRESH")
-            op.reset = True
-
-            row = box.row(align=True)
-            split = row.split(factor=0.25, align=True)
-            split.alignment = "RIGHT"
-            split.label(text="" if self.window_props.scaling_armature else "Scaling:")
-            op = split.operator("ya.pose_apply", text="Import from Clipboard")
-            op.use_clipboard = True
-
-            box.separator(factor=0.5, type="LINE")
-            row = box.row(align=True)
-            split = row.split(factor=0.25, align=True)
-            split.alignment = "RIGHT"
-            split.label(text="Animation:")
-            split.prop(self.outfit_props, "actions", text="", icon="ACTION")
-
-            if self.outfit_props.outfit_armature and self.outfit_props.actions != "None":
-                # box.separator(factor=0.5, type="LINE")
-                row = box.row(align=True)
-                col = row.column(align=True)
-                row = col.row(align=True)
-                row.alignment = "CENTER"
-                row.label(text="Animation Frame:")
-                col.prop(self.outfit_props, "animation_frame", text="")
-                row = box.row(align=True)
-                row.alignment = "CENTER"
-                row.operator("ya.frame_jump", text="", icon="FRAME_PREV").end = False
-                row.operator("ya.keyframe_jump", text="", icon="PREV_KEYFRAME").next = False
-                if bpy.context.screen.is_animation_playing:
-                    row.scale_x = 2
-                    row.operator("screen.animation_play", text="", icon="PAUSE")
-                    row.scale_x = 1
-                else:
-                    row.operator("screen.animation_play", text="", icon="PLAY_REVERSE").reverse = True
-                    row.operator("screen.animation_play", text="", icon="PLAY")
-                row.operator("ya.keyframe_jump", text="", icon="NEXT_KEYFRAME").next = True
-                row.operator("ya.frame_jump", text="", icon="FRAME_NEXT").end = True
-                     
     def dynamic_column_buttons(self, columns:int, layout:UILayout, section_prop, labels: dict[str, str], slot, button_type):
         row = layout.row(align=True)
         columns_list = [row.column(align=True) for _ in range(columns)]

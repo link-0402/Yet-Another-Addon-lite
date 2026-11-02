@@ -9,6 +9,77 @@ from ..mesh.objects  import get_collection_obj, get_object_from_mesh
 from ..utils.typings import DevkitProps
 
 
+YAS_GENITALIA = (
+    "iv_kuritto",
+    "iv_inshin_l",
+    "iv_inshin_r",
+    "iv_omanko",
+    "iv_koumon",
+    "iv_koumon_l",
+    "iv_koumon_r",
+
+    "iv_kintama_phys_l",
+    "iv_kintama_phys_r",
+    "iv_kougan_l",
+    "iv_kougan_r",
+
+    "iv_funyachin_phy_a",
+    "iv_funyachin_phy_b",
+    "iv_funyachin_phy_c",
+    "iv_funyachin_phy_d",
+    "iv_ochinko_a",
+    "iv_ochinko_b",
+    "iv_ochinko_c",
+    "iv_ochinko_d",
+    "iv_ochinko_e",
+    "iv_ochinko_f",
+)
+
+YAS_PHYSICS = (
+    "ya_shiri_phys_l",  "ya_shiri_phys_r",
+    "iv_daitai_phys_l", "iv_daitai_phys_r",
+    "ya_daitai_phys_l", "ya_daitai_phys_r",
+)
+
+YAS_HANDS = (
+    'iv_hito_c_l',
+    'iv_ko_c_l',
+    'iv_kusu_c_l',
+    'iv_naka_c_l',
+
+    'iv_hito_c_r',
+    'iv_ko_c_r',
+    'iv_kusu_c_r',
+    'iv_naka_c_r',
+)
+
+YAS_FEET = (
+    'iv_asi_oya_a_l',
+    'iv_asi_hito_a_l',
+    'iv_asi_naka_a_l',
+    'iv_asi_kusu_a_l',
+    'iv_asi_ko_a_l',
+    'iv_asi_oya_b_l',
+    'iv_asi_hito_b_l',
+    'iv_asi_naka_b_l',
+    'iv_asi_kusu_b_l',
+    'iv_asi_ko_b_l',
+
+    'iv_asi_oya_a_r',
+    'iv_asi_hito_a_r',
+    'iv_asi_naka_a_r',
+    'iv_asi_kusu_a_r',
+    'iv_asi_ko_a_r',
+    'iv_asi_oya_b_r',
+    'iv_asi_hito_b_r',
+    'iv_asi_naka_b_r',
+    'iv_asi_kusu_b_r',
+    'iv_asi_ko_b_r',
+)
+
+YAS_ALL = ("iv_", "ya_")
+
+
 class RemoveEmptyVGroups(Operator):                         
     bl_idname = "ya.remove_empty_vgroups"
     bl_label = ""
@@ -113,12 +184,12 @@ class RemoveSelectedVGroups(Operator):
         else: 
             vertex_group = obj.vertex_groups.active
 
-        if not obj.parent.data.bones.get(vertex_group.name):
-            self.report({'ERROR'}, "Selected group has no parent.")
-            return {'CANCELLED'}
-
         if not obj.parent or obj.parent.type != 'ARMATURE':
             self.report({'ERROR'}, "Mesh is missing a parent skeleton")
+            return {'CANCELLED'}
+
+        if not obj.parent.data.bones.get(vertex_group.name):
+            self.report({'ERROR'}, "Selected group has no parent.")
             return {'CANCELLED'}
         
         remove_vertex_groups(obj, obj.parent, (vertex_group.name))
@@ -241,17 +312,7 @@ class AddYASGroups(Operator):
             'iv_fukubu_phys_r',
         ]
         
-        fingers_groups = [
-            'iv_hito_c_l',
-            'iv_ko_c_l',  
-            'iv_kusu_c_l',
-            'iv_naka_c_l',
-
-            'iv_hito_c_r',
-            'iv_ko_c_r',  
-            'iv_kusu_c_r',
-            'iv_naka_c_r'
-            ]
+        fingers_groups = YAS_HANDS
         
         leg_groups = [
             'iv_shiri_l',
@@ -270,29 +331,7 @@ class AddYASGroups(Operator):
             'ya_daitai_phys_r'   
         ]
 
-        toe_groups = [
-            'iv_asi_oya_a_l',      
-            'iv_asi_hito_a_l',     
-            'iv_asi_naka_a_l',     
-            'iv_asi_kusu_a_l',     
-            'iv_asi_ko_a_l',       
-            'iv_asi_oya_b_l', 
-            'iv_asi_hito_b_l',
-            'iv_asi_naka_b_l',
-            'iv_asi_kusu_b_l',
-            'iv_asi_ko_b_l',
-
-            'iv_asi_oya_a_r',      
-            'iv_asi_hito_a_r',     
-            'iv_asi_naka_a_r',     
-            'iv_asi_kusu_a_r',     
-            'iv_asi_ko_a_r',       
-            'iv_asi_oya_b_r', 
-            'iv_asi_hito_b_r',
-            'iv_asi_naka_b_r',
-            'iv_asi_kusu_b_r',
-            'iv_asi_ko_b_r',  
-        ]
+        toe_groups = YAS_FEET
 
         penis_groups = [
             'iv_kintama_phys_l',              
@@ -363,34 +402,30 @@ class YASManager(Operator):
 
     @classmethod
     def description(cls, context, properties):
+        mannequin = ""
+        if properties.target in ("HANDS", "FEET"):
+            mannequin = f"\n    Includes the Mannequin's {properties.target.lower()} weights"
+
         if properties.mode == "RESTORE":
-            return '''Restore weights to target object.
+            return f'''Restore weights to target object.{mannequin}
     *CTRL click to delete the stored weights'''
-        
+
         elif properties.target == "DEVKIT":
             return "Store weights for devkit meshes"
-        
-        else: 
-            return '''Store target weights.
-    *CTRL click to delete without storing''' 
+
+        else:
+            return f'''Store target weights.{mannequin}
+    *CTRL click to delete without storing'''
 
     def invoke(self, context, event):
         if self.target == 'DEVKIT':
             return self.execute(context)
-        
-        devkit         = get_devkit_props()
-        devkit_targets = {
-                "TORSO": devkit.yam_torso,
-                "LEGS":  devkit.yam_legs,
-                "HANDS": devkit.yam_hands,
-                "FEET":  devkit.yam_feet,
-                "MANNEQUIN": devkit.yam_mannequin,
-            }
-        
+
+        devkit     = get_devkit_props()
         self.store = not event.ctrl
-        target     = devkit_targets[self.target] if self.target != 'ACTIVE' else context.active_object
-        dependent  = self._dependent_target([target], get_devkit_props())
-        delete_dep = self.target != "DEVKIT" and dependent and not self.store
+        target     = self._devkit_objects(devkit).get(self.target) if self.target != 'ACTIVE' else context.active_object
+        dependent  = self._dependent_target([target], devkit) or self._mannequin_groups(context, devkit) is not None
+        delete_dep = dependent and not self.store
 
         if (self.target == "ACTIVE" or delete_dep) and dependent:
             cond_text = "restored" if self.mode == "RESTORE" else "stored"
@@ -399,168 +434,178 @@ class YASManager(Operator):
 
             context.window_manager.invoke_confirm(
                 self,
-                event=None, 
-                title="YAS Manager", 
+                event=None,
+                title="YAS Manager",
                 message=f"The selected mesh is dependent on other devkit source meshes, the dependencies will also be {cond_text}.",
                 icon='INFO'
                 )
             return {'RUNNING_MODAL'}
         else:
             return self.execute(context)
-    
+
     def execute(self, context: Context):
         props   = get_studio_props()
         devkit  = get_devkit_props()
         targets = self.get_targets(context, devkit)
-        
+
+        # Validate everything up front so a failure doesn't leave the targets half processed.
+        if self.mode == "RESTORE":
+            for obj, groups in targets.items():
+                if not self._has_stored(obj, groups):
+                    continue
+                if len(obj.data.vertices) != obj.yas.old_count:
+                    self.report({'ERROR'}, f"{obj.name}'s vertex count has changed, not possible to restore.")
+                    return {'CANCELLED'}
+        else:
+            skeletons = {obj: self._get_skeleton(obj, devkit) for obj in targets}
+            for obj, skeleton in skeletons.items():
+                if skeleton is None:
+                    self.report({'ERROR'}, f"{obj.name} is not parented to a skeleton.")
+                    return {'CANCELLED'}
+
+        skipped: list[str] = []
         context.window.cursor_set('WAIT')
         try:
             if self.mode == "RESTORE":
-                for obj in targets:
-                    if not obj or not obj.yas.v_groups:
+                for obj, groups in targets.items():
+                    if not self._has_stored(obj, groups):
                         continue
-                    if len(obj.data.vertices) != obj.yas.old_count:
-                        self.report({'ERROR'}, f"{obj.name}'s vertex count has changed, not possible to restore.")
-                        return {'CANCELLED'}
 
                     if self.store:
-                        restore_yas_groups(obj)
+                        restore_yas_groups(obj, groups)
                     else:
-                        obj.yas.v_groups.clear()
-                    
-                    obj.yas.all_groups = False
-                    obj.yas.genitalia  = False
-                    obj.yas.physics    = False
-                        
+                        self._discard_stored(obj, groups)
+
+                    self._update_flags(obj)
+
             else:
                 prefix = self.get_prefix()
-                for obj in targets:
-                    if not obj: 
-                        continue
-                    if devkit:
-                        skeleton  = bpy.data.objects.get("Skeleton")
-                    elif obj.parent.type == 'ARMATURE':
-                        skeleton = obj.parent
-                    else:
-                        self.report({'ERROR'}, f"{obj.name} is not parented to a skeleton.")
-                        return {'CANCELLED'}
-                    
-                    remove_vertex_groups(obj, skeleton, prefix, self.store)
+                for obj, groups in targets.items():
+                    skipped += remove_vertex_groups(obj, skeletons[obj], groups or prefix, self.store)
                     if obj.yas.v_groups:
                         obj.yas.old_count = len(obj.data.vertices)
-                        if self.mode == "ALL":
-                            obj.yas.all_groups = True
-                        elif self.mode == "GEN":
-                            obj.yas.genitalia  = True
-                        elif self.mode == "PHYS":
-                            obj.yas.physics    = True
+
+                    self._update_flags(obj)
         finally:
             context.window.cursor_set('DEFAULT')
 
+        if skipped:
+            self.report({'WARNING'}, f"No parent bone found for {', '.join(sorted(set(skipped)))}, left unchanged.")
+
         props.set_yas_ui_vgroups(context)
         return {'FINISHED'}
-    
-    def get_targets(self, context: Context, devkit: DevkitProps) -> list[Object]:
+
+    def get_targets(self, context: Context, devkit: DevkitProps) -> dict[Object, tuple[str, ...] | None]:
+        """Target objects mapped to the groups to handle, None means the groups of the selected mode."""
         base_targets = self._get_base_targets(context, devkit)
 
-        if self._dependent_target(base_targets, devkit) or self.target == 'DEVKIT':
+        if self.target == 'DEVKIT' or self._dependent_target(base_targets, devkit):
             base_targets.extend(self._get_devkit_targets(devkit))
-        
+
         if devkit:
             self._add_secondary_meshes(base_targets, devkit)
-        
-        return base_targets
 
-    def get_prefix(self) -> tuple[str, ...]:
-        if self.mode == "ALL":
-            prefix = ("iv_", "ya_")
-        elif self.mode == "PHYS":
-            prefix = (""
-                "ya_shiri_phys_l",  "ya_shiri_phys_r",
-                "iv_daitai_phys_l", "iv_daitai_phys_r",
-                "ya_daitai_phys_l", "ya_daitai_phys_r"
-                )
-        else:
-            prefix = (
-                "iv_kuritto",                   
-                "iv_inshin_l",               
-                "iv_inshin_r",               
-                "iv_omanko", 
-                "iv_koumon",                      
-                "iv_koumon_l",                 
-                "iv_koumon_r",
-
-                "iv_kintama_phys_l",              
-                "iv_kintama_phys_r",    
-                "iv_kougan_l",
-                "iv_kougan_r",
-            
-                "iv_funyachin_phy_a",
-                "iv_funyachin_phy_b",        
-                "iv_funyachin_phy_c",        
-                "iv_funyachin_phy_d",     
-                "iv_ochinko_a",                 
-                "iv_ochinko_b",              
-                "iv_ochinko_c",              
-                "iv_ochinko_d",                 
-                "iv_ochinko_e",         
-                "iv_ochinko_f",
-                )
-        
-        return prefix
-
-    def _get_base_targets(self, context: Context, devkit: DevkitProps) -> list[Object]:
-        if devkit:
-            devkit_targets = {
-                "TORSO": devkit.yam_torso,
-                "LEGS":  devkit.yam_legs,
-                "HANDS": devkit.yam_hands,
-                "FEET":  devkit.yam_feet,
-                "MANNEQUIN": devkit.yam_mannequin,
+        targets: dict[Object, tuple[str, ...] | None] = {
+            obj: None for obj in base_targets if obj and obj.type == 'MESH'
             }
 
-            if self.target == "DEVKIT" and self.mode == "GEN":
-                return [devkit.yam_legs, devkit.yam_mannequin] 
-            
-            if self.target in devkit_targets:
-                return [devkit_targets[self.target]]
-        
+        mannequin_groups = self._mannequin_groups(context, devkit)
+        if mannequin_groups and devkit.yam_mannequin not in targets:
+            targets[devkit.yam_mannequin] = mannequin_groups
+
+        return targets
+
+    def get_prefix(self) -> tuple[str, ...]:
+        prefixes = {
+            "ALL"  : YAS_ALL,
+            "PHYS" : YAS_PHYSICS,
+            "HANDS": YAS_HANDS,
+            "FEET" : YAS_FEET,
+        }
+
+        return prefixes.get(self.mode, YAS_GENITALIA)
+
+    def _devkit_objects(self, devkit: DevkitProps) -> dict[str, Object]:
+        if not devkit:
+            return {}
+
+        return {
+            "TORSO": devkit.yam_torso,
+            "LEGS":  devkit.yam_legs,
+            "HANDS": devkit.yam_hands,
+            "FEET":  devkit.yam_feet,
+            "MANNEQUIN": devkit.yam_mannequin,
+        }
+
+    def _get_base_targets(self, context: Context, devkit: DevkitProps) -> list[Object]:
+        if self.target == "DEVKIT":
+            return []
+
+        devkit_targets = self._devkit_objects(devkit)
+        if self.target in devkit_targets:
+            return [devkit_targets[self.target]]
+
         return [context.active_object] if context.active_object else []
 
     def _dependent_target(self, base_targets: list[Object], devkit: DevkitProps) -> bool:
-        if not devkit or not base_targets:
+        if not devkit or not base_targets or not base_targets[0]:
             return False
-        
+
         if self.target == "DEVKIT":
             return self.mode not in ("GEN", "PHYS")
-        
+
         if self.mode == "RESTORE":
             if not base_targets[0].yas.all_groups:
                 return False
-        
+
         if self.mode in ("ALL", "RESTORE"):
             dependent_targets = {"TORSO", "LEGS", "MANNEQUIN"}
-            
+
             if self.target in dependent_targets:
                 return True
-            
+
             if self.target == "ACTIVE":
                 devkit_objects = [devkit.yam_torso, devkit.yam_legs, devkit.yam_mannequin]
                 return base_targets[0] in devkit_objects
-        
+
         return False
+
+    def _mannequin_groups(self, context: Context, devkit: DevkitProps) -> tuple[str, ...] | None:
+        """The Mannequin contains the devkit hands and feet as well, so their weights are handled there too."""
+        if not devkit or not devkit.yam_mannequin or self.target == "DEVKIT":
+            return None
+
+        source = self._devkit_objects(devkit).get(self.target) if self.target != 'ACTIVE' else context.active_object
+        if source is None:
+            return None
+
+        if source == devkit.yam_hands and self.mode in ("ALL", "HANDS", "RESTORE"):
+            groups = YAS_HANDS
+        elif source == devkit.yam_feet and self.mode in ("ALL", "FEET", "RESTORE"):
+            groups = YAS_FEET
+        else:
+            return None
+
+        if self.mode == "RESTORE" and not self._has_stored(devkit.yam_mannequin, groups):
+            return None
+
+        return groups
 
     def _get_devkit_targets(self, devkit: DevkitProps) -> list[Object]:
         if self.target == "DEVKIT" and self.mode == "ALL":
             devkit_objects = [devkit.yam_torso, devkit.yam_legs,devkit.yam_hands, devkit.yam_feet, devkit.yam_mannequin]
+        elif self.target == "DEVKIT" and self.mode == "HANDS":
+            devkit_objects = [devkit.yam_hands, devkit.yam_mannequin]
+        elif self.target == "DEVKIT" and self.mode == "FEET":
+            devkit_objects = [devkit.yam_feet, devkit.yam_mannequin]
         else:
             devkit_objects = [devkit.yam_torso, devkit.yam_legs, devkit.yam_mannequin]
 
         data_source_objects = get_collection_obj("Data Sources", type='MESH', sub_collections=True)
-        
+
         devkit_targets = devkit_objects + data_source_objects
         return devkit_targets
-    
+
     def _add_secondary_meshes(self, targets: list[Object], devkit: DevkitProps):
         if devkit.yam_torso in targets:
             targets.append(get_object_from_mesh("Neck"))
@@ -572,7 +617,7 @@ class YASManager(Operator):
         if devkit.yam_hands in targets:
             targets.extend(get_collection_obj("Nails", type='MESH', sub_collections=True))
             targets.extend(get_collection_obj("Clawsies", type='MESH'))
-        
+
         if devkit.yam_legs in targets:
             targets.append(get_object_from_mesh("Knees"))
             targets.extend(get_collection_obj("Pubes", type='MESH'))
@@ -580,6 +625,42 @@ class YASManager(Operator):
         if devkit.yam_feet in targets:
             targets.extend(get_collection_obj("Toenails", type='MESH'))
             targets.extend(get_collection_obj("Toe Clawsies", type='MESH'))
+
+    def _get_skeleton(self, obj: Object, devkit: DevkitProps) -> Object | None:
+        skeleton = bpy.data.objects.get("Skeleton") if devkit else None
+        if skeleton is None or skeleton.type != 'ARMATURE':
+            skeleton = obj.parent
+
+        if skeleton is None or skeleton.type != 'ARMATURE':
+            return None
+
+        return skeleton
+
+    def _has_stored(self, obj: Object, groups: tuple[str, ...] | None) -> bool:
+        if groups is None:
+            return bool(obj.yas.v_groups)
+
+        return any(v_group.name in groups for v_group in obj.yas.v_groups)
+
+    def _discard_stored(self, obj: Object, groups: tuple[str, ...] | None) -> None:
+        v_groups = obj.yas.v_groups
+        for idx in reversed(range(len(v_groups))):
+            if groups is None or v_groups[idx].name in groups:
+                v_groups.remove(idx)
+
+    def _update_flags(self, obj: Object) -> None:
+        """A category counts as stored when its groups are in storage and none are left on the mesh."""
+        stored  = {v_group.name for v_group in obj.yas.v_groups}
+        present = {v_group.name for v_group in obj.vertex_groups}
+
+        def category_stored(groups: tuple[str, ...]) -> bool:
+            return bool(stored.intersection(groups)) and not present.intersection(groups)
+
+        obj.yas.all_groups = bool(stored) and not any(name.startswith(YAS_ALL) for name in present)
+        obj.yas.genitalia  = category_stored(YAS_GENITALIA)
+        obj.yas.physics    = category_stored(YAS_PHYSICS)
+        obj.yas.hands      = category_stored(YAS_HANDS)
+        obj.yas.feet       = category_stored(YAS_FEET)
 
     
 CLASSES = [

@@ -63,10 +63,11 @@ class TorsoState(PropertyGroup):
 
     MANNEQUIN: bool
 
-    chest_size: str
-    buff      : bool
-    rue       : bool
-    lavabod   : bool
+    chest_size    : str
+    buff          : bool
+    rue           : bool
+    better_nipples: bool
+    lavabod       : bool
 
     yab_keys : Iterable[SubKeyValues]
     lava_keys: Iterable[SubKeyValues]
@@ -81,6 +82,7 @@ class LegState(PropertyGroup):
     small_butt: bool
     soft_butt : bool
     alt_hips  : bool
+    camel_toe : bool
     squish    : str
 
 class HandState(PropertyGroup):
