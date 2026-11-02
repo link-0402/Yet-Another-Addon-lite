@@ -1,10 +1,5 @@
 # Yet Another Addon (Lite)
-This is a Blender add-on which aims to give various tools to aid in XIV Modding workflows. This is the lite version: model import/export, Penumbra modpacking, .pose and scaling import, and the model overview have been removed in favour of Instant Edit. What remains:
-* Fix for transparent meshes made in Blender.
-* Shape key transfer and modifier application for meshes with shape keys.
-* Backface creation and XIV flow data tools.
-* YAS weight management, including storing and restoring YAS weights on devkit meshes.
-* Syncing the devkit's Mannequin to its separate body parts: with "Sync Mannequin to Body Parts" on (Devkit panel, Body), size and shape changes made on the Mannequin also go to the torso, legs, hands and feet.
+This is a Blender add-on which aims to give various tools to aid in XIV Modding workflows and working with the YAB/Rue/Lava devkit scene. This is a lite version: model import/export, Penumbra modpacking, pose and scaling import, and the model overview have been removed in favour of Instant Edit.
 
 You'll find most of the features under the "XIV Kit" tab in the 3D Viewport.
 
@@ -12,8 +7,8 @@ You'll find most of the features under the "XIV Kit" tab in the 3D Viewport.
 * Native XIV model import/export (.mdl).
 * File export with the ability to retain XIV specific properties.
 * Penumbra compatible modpackaging.
-* XIV .pose and scaling import (the clipboard permission for pasting bone scaling is gone with it).
-* The model overview.
+* XIV .pose and scaling import.
+* The model/mesh group overview.
 
 These features are superseded by [MagicFit](https://github.com/link-0402/MagicFit) (editing tools) and [Instant Edit](https://github.com/link-0402/XIV-Instant-Edit) (model export/import, among other things). 
 
