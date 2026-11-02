@@ -16,6 +16,7 @@ You'll find most of the features under the "XIV Kit" tab in the 3D Viewport.
 * The model overview.
 
 These features are superseded by [MagicFit](https://github.com/link-0402/MagicFit) (editing tools) and [Instant Edit](https://github.com/link-0402/XIV-Instant-Edit) (model export/import, among other things). 
+
 The [wiki](https://github.com/Arrenval/Yet-Another-Addon/wiki) belongs to the full add-on, so it also describes features that are not in this version. It still covers the remaining tools and the compatible YAB+ Devkit.
 
 ## Blender support
